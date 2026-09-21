@@ -54,14 +54,22 @@ function protectCode(markdown: string): {
   const protectedChunks: string[] = [];
   function store(chunk: string): string {
     const token = `@@NIMBUS_MD_CODE_${protectedChunks.length}@@`;
-    protectedChunks.push(
-      chunk.startsWith("```") ? chunk.replace(/\n[ \t]{4}/g, "\n") : chunk,
-    );
+    protectedChunks.push(chunk);
     return token;
   }
 
   // Fenced blocks first so inline-code protection doesn't touch backticks inside.
-  let next = markdown.replace(/```[\s\S]*?```/g, store);
+  let next = markdown.replace(
+    /(^[ \t]*)?```[\s\S]*?```/gm,
+    (chunk: string, indent = "") =>
+      // Remove the enclosing layout indentation, never the code's own indent.
+      store(
+        chunk
+          .split("\n")
+          .map((line) => line.startsWith(indent) ? line.slice(indent.length) : line)
+          .join("\n"),
+      ),
+  );
   next = next.replace(/`[^`\n]+`/g, store);
 
   return {
@@ -324,9 +332,9 @@ export function renderEntryAsMarkdown(
     );
   }
   markdown = applyDefaultComponentTransforms(markdown);
-  markdown = protectedCode.restore(markdown);
 
-  return markdown
+  // Normalize prose while code is still protected, including its blank lines.
+  markdown = markdown
     .replace(/^[ \t]+(- (?:\*\*|\[))/gm, "$1")
     .replace(/^[ \t]+(\d+\. \*\*)/gm, "$1")
     .replace(/^[ \t]+(### )/gm, "$1")
@@ -334,4 +342,6 @@ export function renderEntryAsMarkdown(
     .replace(/^[ \t]+$/gm, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+
+  return protectedCode.restore(markdown);
 }
